@@ -11,6 +11,7 @@ BUILD_NUMBER="$(git -C "$ROOT" rev-list --count HEAD 2>/dev/null || echo 1)"
 echo "→ Running engine tests"
 node "$ROOT/tests/geometry.test.js" > /dev/null
 node "$ROOT/tests/accuracy.test.js" > /dev/null || { node "$ROOT/tests/accuracy.test.js" | grep FAIL; exit 1; }
+node "$ROOT/tests/refine.test.js" > /dev/null || { node "$ROOT/tests/refine.test.js" 2>&1 | grep -A3 FAIL; exit 1; }
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"

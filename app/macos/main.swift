@@ -220,6 +220,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     @objc private func zoomIn(_ sender: Any?) { callJS("window.LogoGrid.zoomIn()") }
     @objc private func zoomOut(_ sender: Any?) { callJS("window.LogoGrid.zoomOut()") }
     @objc private func zoomFit(_ sender: Any?) { callJS("window.LogoGrid.zoomFit()") }
+    @objc private func findImprovements(_ sender: Any?) { callJS("window.LogoGrid.findImprovements()") }
+    @objc private func showOriginal(_ sender: Any?) { callJS("window.LogoGrid.setView('original')") }
+    @objc private func showCompare(_ sender: Any?) { callJS("window.LogoGrid.setView('compare')") }
+    @objc private func showRefined(_ sender: Any?) { callJS("window.LogoGrid.setView('refined')") }
 
     private func buildMenu() {
         let main = NSMenu()
@@ -277,6 +281,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         ])
 
         _ = submenu("View", [
+            item("Find Improvements", #selector(findImprovements(_:)), "r"),
+            item("Original Logo", #selector(showOriginal(_:)), "1"),
+            item("Compare with Refined", #selector(showCompare(_:)), "2"),
+            item("Refined Logo", #selector(showRefined(_:)), "3"),
+            .separator(),
             item("Zoom In", #selector(zoomIn(_:)), "="),
             item("Zoom Out", #selector(zoomOut(_:)), "-"),
             item("Zoom to Fit", #selector(zoomFit(_:)), "0"),

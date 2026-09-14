@@ -4,6 +4,7 @@
 
   var G = window.LogoGridGeometry;
   var Importer = window.LogoGridImporter;
+  var Refine = window.LogoGridRefine;
   var BOOT = window.__LOGOGRID_BOOT__ || {};
   var nativeBridge =
     window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.native;
@@ -134,6 +135,8 @@
     canvas: null,
     zoom: 1,
     hover: null, // id of the setting being explained on the canvas
+    // Refine results for the open logo: { inspection, accepted, view, doc, result, moved, previews }
+    refine: null,
   };
   var S = state.settings;
 
@@ -386,7 +389,8 @@
       r.row.classList.toggle("off", !layer.visible);
       var color = r.def.swatch(layer);
       r.swatch.style.background = color || "conic-gradient(#111 0 25%, #FF5A1F 0 50%, #111 0 75%, #FF5A1F 0)";
-      r.count.textContent = r.def.count && state.result ? state.result[r.def.count].length : "";
+      var result = showingRefined() ? state.refine.result : state.result;
+      r.count.textContent = r.def.count && result ? result[r.def.count].length : "";
     });
   }
 
@@ -501,7 +505,7 @@
     if (!state.doc) return;
     state.canvas = computeCanvas();
     var d = S.detection;
-    state.result = G.analyze(state.doc.paths, state.canvas, state.doc.artBounds, {
+    var options = {
       minSegmentLength: d.minSegmentLength,
       lineAngleTolerance: d.lineAngleTolerance,
       lineMergeDistance: d.lineMergeDistance,
@@ -509,7 +513,17 @@
       minRadius: d.minRadius,
       circleMergeTolerance: d.circleMergeTolerance / 100,
       circleFitTolerance: d.circleFitTolerance / 100,
-    });
+    };
+    state.result = G.analyze(state.doc.paths, state.canvas, state.doc.artBounds, options);
+    // The refined logo is measured against the original's bounds, so the canvas doesn't shift.
+    if (state.refine && state.refine.doc) {
+      state.refine.result = G.analyze(state.refine.doc.paths, state.canvas, state.doc.artBounds, options);
+    }
+  }
+
+  // Compare and Refined show (and export) the refined logo.
+  function showingRefined() {
+    return !!(state.refine && state.refine.doc && state.refine.view !== "original");
   }
 
   function f(n) {
@@ -526,7 +540,10 @@
   //   overlay extra SVG markup drawn on top
   function buildSVG(options) {
     var opts = options || {};
-    var doc = state.doc, r = state.result, cv = state.canvas, L = S.layers;
+    var refined = showingRefined() && !opts.original;
+    var doc = refined ? state.refine.doc : state.doc;
+    var r = refined ? state.refine.result : state.result;
+    var cv = state.canvas, L = S.layers;
     function shown(layer, id) { return layer.visible || opts.show === id; }
     function opacity(id, value) {
       var dim = opts.dim && opts.dim[id] != null ? opts.dim[id] : 1;
@@ -546,8 +563,21 @@
 
     if (shown(L.logo, "Logo")) {
       var op = opacity("Logo", L.logo.opacity);
-      if (L.logo.mode === "original") {
+      if (L.logo.mode === "original" && doc.originalMarkup) {
         out.push('<g id="Logo" opacity="' + op + '">' + doc.originalMarkup + "</g>");
+      } else if (L.logo.mode === "original") {
+        // A reshaped logo has no original markup; draw each shape in its own paint.
+        out.push('<g id="Logo" opacity="' + op + '">');
+        doc.elements.forEach(function (el) {
+          var fill = el.fill == null ? L.logo.color : el.fill;
+          out.push(
+            '<path d="' + el.d + '" fill="' + escapeAttr(fill) + '"' +
+            (el.fillRule === "evenodd" ? ' fill-rule="evenodd"' : "") +
+            (el.fillOpacity < 1 ? ' fill-opacity="' + f(el.fillOpacity) + '"' : "") +
+            (el.stroke ? ' stroke="' + escapeAttr(el.stroke) + '" stroke-width="' + f(el.strokeWidth) + '"' : "") + "/>"
+          );
+        });
+        out.push("</g>");
       } else {
         var outline = L.logo.mode === "outline";
         out.push(
@@ -661,7 +691,7 @@
   // Collects highlight shapes. Sizes are in screen pixels; each shape gets a
   // halo in the background's contrast color so it reads on any preset.
   function Marks(pxToUnits, halo) {
-    var under = [], over = [], rings = [];
+    var under = [], over = [], rings = [], labels = [];
     function paint(color, width, dashed) {
       return ' fill="none" stroke="' + color + '" stroke-width="' + f(width * pxToUnits) + '" stroke-linecap="round"' +
         (dashed ? ' stroke-dasharray="' + f(6 * pxToUnits) + " " + f(5 * pxToUnits) + '"' : "");
@@ -695,8 +725,36 @@
       rect: function (r, color, o) {
         add('rect x="' + f(r.x) + '" y="' + f(r.y) + '" width="' + f(r.w) + '" height="' + f(r.h) + '"', color, o);
       },
+      path: function (d, color, o) {
+        add('path d="' + d + '" stroke-linejoin="round"', color, o);
+      },
+      // A small screen-sized cross, for centers.
+      cross: function (p, color) {
+        var s = 6 * pxToUnits;
+        add('path d="M' + f(p[0] - s) + " " + f(p[1]) + "H" + f(p[0] + s) + "M" + f(p[0]) + " " + f(p[1] - s) + "V" + f(p[1] + s) + '"', color, { width: 1.5 });
+      },
+      // Where a point is, and a line to where it should be.
+      arrow: function (a, b, color) {
+        this.ring(a, color);
+        if (Math.hypot(b[0] - a[0], b[1] - a[1]) > 2 * pxToUnits) add('line x1="' + f(a[0]) + '" y1="' + f(a[1]) + '" x2="' + f(b[0]) + '" y2="' + f(b[1]) + '"', color, { width: 2 });
+      },
+      // A measurement between two points, with ticks at the ends and its value.
+      dimension: function (a, b, color, text) {
+        var len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+        var nx = (-(b[1] - a[1]) / len) * 5 * pxToUnits, ny = ((b[0] - a[0]) / len) * 5 * pxToUnits;
+        add('path d="M' + f(a[0]) + " " + f(a[1]) + "L" + f(b[0]) + " " + f(b[1]) +
+          "M" + f(a[0] - nx) + " " + f(a[1] - ny) + "L" + f(a[0] + nx) + " " + f(a[1] + ny) +
+          "M" + f(b[0] - nx) + " " + f(b[1] - ny) + "L" + f(b[0] + nx) + " " + f(b[1] + ny) + '"', color, { width: 1.5 });
+        if (text) {
+          labels.push(
+            '<text x="' + f((a[0] + b[0]) / 2) + '" y="' + f((a[1] + b[1]) / 2) + '" font-size="' + f(11 * pxToUnits) + '"' +
+            ' font-family="-apple-system, BlinkMacSystemFont, sans-serif" font-weight="600" text-anchor="middle" dominant-baseline="middle"' +
+            ' fill="' + color + '" stroke="' + halo + '" stroke-width="' + f(3 * pxToUnits) + '" paint-order="stroke">' + text + "</text>"
+          );
+        }
+      },
       toString: function () {
-        return '<g id="Highlight" pointer-events="none">' + under.join("") + over.join("") + "</g>";
+        return '<g id="Highlight" pointer-events="none">' + under.join("") + over.join("") + labels.join("") + "</g>";
       },
     };
   }
@@ -908,9 +966,13 @@
 
   function explainHover() {
     var id = state.hover;
-    if (!id || !state.result) return null;
+    if (!state.result) return null;
+    if (!id) return explainRefinedView();
     var info;
-    if (id.indexOf("layer.") === 0) {
+    if (id.indexOf("refine.") === 0) {
+      info = explainSuggestion(id.slice(7));
+      if (!info) return null;
+    } else if (id.indexOf("layer.") === 0) {
       var key = id.slice(6), text = LAYER_TEXT[key];
       var dim = {};
       GROUPS.forEach(function (g) { dim[g] = g === text[2] ? 1 : 0.12; });
@@ -928,9 +990,248 @@
     }
     var marks = Marks(1 / displayScale(), haloColor());
     if (info.draw) info.draw(marks);
-    info.svg = { dim: info.dim || DETECTION_DIM, show: info.show, overlay: info.draw ? String(marks) : "" };
+    info.svg = { dim: info.dim || DETECTION_DIM, show: info.show, overlay: info.draw ? String(marks) : "", original: info.original };
     return info;
   }
+
+  // ===============================================================
+  // Refine
+  //
+  // "Find improvements" lists near-misses (weights, radii, angles,
+  // alignment, symmetry). Checked ones are applied to a refined copy of
+  // the logo, which Compare and Refined show and export.
+  // ===============================================================
+
+  function formatLength(v) {
+    var digits = v >= 100 ? 1 : v >= 1 ? 2 : 3;
+    return String(Number(v.toFixed(digits)));
+  }
+
+  function findSuggestion(id) {
+    var rf = state.refine;
+    if (!rf) return null;
+    for (var i = 0; i < rf.inspection.suggestions.length; i++) {
+      if (rf.inspection.suggestions[i].id === id) return rf.inspection.suggestions[i];
+    }
+    return null;
+  }
+
+  // The shapes this one fix reshapes, drawn over the original while hovering it.
+  function previewOf(sg) {
+    var rf = state.refine;
+    if (rf.previews[sg.id] == null) {
+      var fixed = docFromPaths(rf.inspection.refine([sg.id]).paths);
+      rf.previews[sg.id] = fixed.elements.filter(function (el, i) { return el.d !== state.doc.elements[i].d; })
+        .map(function (el) { return el.d; }).join("");
+    }
+    return rf.previews[sg.id];
+  }
+
+  function explainSuggestion(id) {
+    var sg = findSuggestion(id);
+    if (!sg) return null;
+    var color = { issue: MARK.near, target: MARK.keep, ok: MARK.keep };
+    return {
+      title: sg.title,
+      text: sg.detail,
+      legend: [
+        [MARK.near, "Off now"],
+        [MARK.keep, "Exact", true],
+        [MARK.keep, "Your logo with this fix"],
+      ],
+      hint: state.refine.accepted[id] ? "Included in the refined logo. Uncheck to leave it as drawn." : "Not included. Check it to add it to the refined logo.",
+      original: true,
+      draw: function (m) {
+        var preview = previewOf(sg);
+        if (preview) m.path(preview, MARK.keep, { width: 1.25 });
+        sg.marks.forEach(function (mk) {
+          var c = color[mk.role];
+          var target = mk.role === "target";
+          if (mk.type === "polyline") m.polyline(mk.points, c, { width: 4 });
+          else if (mk.type === "bezier") m.bezier(mk.bz, c, { width: 4 });
+          else if (mk.type === "line") m.line(mk.a, mk.b, c, { dashed: target, width: 1.5 });
+          else if (mk.type === "circle") m.circle(mk, c, { dashed: target, width: 1.5 });
+          else if (mk.type === "dot") m.cross(mk.p, c);
+          else if (mk.type === "arrow") m.arrow(mk.a, mk.b, c);
+          else if (mk.type === "dimension") m.dimension(mk.a, mk.b, c, formatLength(mk.value));
+        });
+      },
+    };
+  }
+
+  function explainRefinedView() {
+    if (!showingRefined()) return null;
+    var rf = state.refine;
+    var info = {
+      title: rf.view === "compare" ? "Comparing with your original" : "Refined logo",
+      text: rf.view === "compare"
+        ? "Your logo with " + plural(rf.applied, "improvement") + " applied. The dashed outline is the original; rings mark points that moved."
+        : "Your logo with " + plural(rf.applied, "improvement") + " applied. Exports use this version.",
+      legend: rf.view === "compare" ? [[MARK.drop, "Original outline", true], [MARK.drop, plural(rf.moved.length, "point") + " moved"]] : [],
+      hint: "Hover a suggestion to see what it changes.",
+      dim: {},
+    };
+    if (rf.view === "compare") {
+      info.draw = function (m) {
+        m.path(state.doc.elements.map(function (el) { return el.d; }).join(""), MARK.drop, { width: 1, dashed: true });
+        rf.moved.slice(0, 300).forEach(function (mv) { m.ring(mv[1], MARK.drop); });
+      };
+    }
+    var marks = Marks(1 / displayScale(), haloColor());
+    if (info.draw) info.draw(marks);
+    info.svg = { dim: info.dim, overlay: info.draw ? String(marks) : "" };
+    return info;
+  }
+
+  function docFromPaths(paths) {
+    var doc = state.doc;
+    var d = doc.elements.map(function () { return ""; });
+    paths.forEach(function (sp) { d[Number(String(sp.id).split("_")[0])] += G.subpathToPathData(sp); });
+    return {
+      name: doc.name,
+      paths: paths,
+      elements: doc.elements.map(function (el, i) { return Object.assign({}, el, { d: d[i] }); }),
+      artboard: doc.artboard,
+      artBounds: doc.artBounds,
+      originalMarkup: null,
+    };
+  }
+
+  function findImprovements() {
+    if (!state.doc) return;
+    var inspection = Refine.inspect(state.doc.paths, state.doc.elements.map(function (el) { return el.fillRule; }));
+    var accepted = {};
+    inspection.suggestions.forEach(function (sg) { accepted[sg.id] = true; });
+    state.refine = {
+      inspection: inspection,
+      accepted: accepted,
+      view: inspection.suggestions.length ? "compare" : "original",
+      previews: {},
+    };
+    state.hover = null;
+    applyRefinements();
+    renderRefinePanel();
+    if (inspection.suggestions.length) toast("Found " + plural(inspection.suggestions.length, "improvement") + " · comparing with your original");
+  }
+
+  function applyRefinements() {
+    var rf = state.refine;
+    var ids = rf.inspection.suggestions.filter(function (sg) { return rf.accepted[sg.id]; }).map(function (sg) { return sg.id; });
+    rf.applied = ids.length;
+    if (ids.length) {
+      var solved = rf.inspection.refine(ids);
+      rf.doc = docFromPaths(solved.paths);
+      rf.moved = solved.moved;
+    } else {
+      rf.doc = rf.result = null;
+      rf.moved = [];
+    }
+    analyze();
+    render();
+    updateLayerRows();
+  }
+
+  function setView(view) {
+    if (!state.refine) return;
+    state.refine.view = view;
+    analyze();
+    render();
+    updateLayerRows();
+  }
+
+  function clearRefine() {
+    state.refine = null;
+    state.hover = null;
+    analyze();
+    render();
+    updateLayerRows();
+    renderRefinePanel();
+  }
+
+  function renderRefinePanel() {
+    var rf = state.refine;
+    $("refineIntro").hidden = !!rf;
+    $("refineResults").hidden = !rf;
+    $("refineRun").disabled = !state.doc;
+    var list = $("refineList");
+    list.textContent = "";
+    if (!rf) return;
+    var suggestions = rf.inspection.suggestions;
+    var summary = $("refineSummary");
+    summary.classList.toggle("perfect", !suggestions.length);
+    summary.textContent = "";
+    if (!suggestions.length) {
+      var c = rf.inspection.checked;
+      var parts = [];
+      if (c.weights) parts.push(plural(c.weights, "stroke weight"));
+      if (c.radii) parts.push(plural(c.radii, "radius", "radii"));
+      if (c.angles) parts.push(plural(c.angles, "edge angle"));
+      summary.appendChild(h("b", { text: "Nothing to refine" }));
+      summary.appendChild(document.createTextNode(
+        (parts.length ? "Checked " + parts.join(", ") + ": everything that should match does." : "No near-misses found.") +
+        (c.symmetry.some(function (s) { return s === "vertical" || s === "horizontal"; }) ? " Mirror symmetry is exact." : "")
+      ));
+      $("refineAll").hidden = $("refineNone").hidden = true;
+      return;
+    }
+    $("refineAll").hidden = $("refineNone").hidden = false;
+    renderRefineSummary();
+    suggestions.forEach(function (sg) {
+      var box = h("input", { type: "checkbox", "aria-label": sg.title });
+      box.checked = !!rf.accepted[sg.id];
+      box.addEventListener("change", function () {
+        rf.accepted[sg.id] = box.checked;
+        if (box.checked && rf.view === "original") rf.view = "compare";
+        card.classList.toggle("off", !box.checked);
+        applyRefinements();
+        renderRefineSummary();
+      });
+      var card = h("label", { class: "suggestion" + (box.checked ? "" : " off") }, [
+        box,
+        h("span", {}, [h("div", { class: "suggestion-title", text: sg.title }), h("div", { class: "suggestion-detail", text: sg.detail })]),
+      ]);
+      attachHover(card, "refine." + sg.id);
+      list.appendChild(card);
+    });
+  }
+
+  function renderRefineSummary() {
+    var rf = state.refine;
+    var suggestions = rf.inspection.suggestions;
+    if (!suggestions.length) return;
+    var biggest = Math.max.apply(null, suggestions.map(function (sg) { return sg.maxMove; }));
+    $("refineSummary").innerHTML =
+      "<b>" + plural(suggestions.length, "improvement") + "</b> · " + rf.applied + " applied · largest moves a point " + formatLength(biggest);
+  }
+
+  function renderViewToggle() {
+    var rf = state.refine;
+    var el = $("viewToggle");
+    el.hidden = !(rf && rf.inspection.suggestions.length);
+    if (el.hidden) return;
+    Array.prototype.forEach.call(el.querySelectorAll("button"), function (b) {
+      var view = b.getAttribute("data-view");
+      b.classList.toggle("active", (rf.doc ? rf.view : "original") === view);
+      b.disabled = view !== "original" && !rf.doc;
+    });
+  }
+
+  $("refineRun").addEventListener("click", findImprovements);
+  $("refineClear").addEventListener("click", clearRefine);
+  $("refineAll").addEventListener("click", function () {
+    state.refine.inspection.suggestions.forEach(function (sg) { state.refine.accepted[sg.id] = true; });
+    if (state.refine.view === "original") state.refine.view = "compare";
+    applyRefinements();
+    renderRefinePanel();
+  });
+  $("refineNone").addEventListener("click", function () {
+    state.refine.accepted = {};
+    applyRefinements();
+    renderRefinePanel();
+  });
+  Array.prototype.forEach.call($("viewToggle").querySelectorAll("button"), function (b) {
+    b.addEventListener("click", function () { setView(b.getAttribute("data-view")); });
+  });
 
   function renderExplanation(info) {
     $("explain").classList.toggle("idle", !info);
@@ -972,11 +1273,12 @@
     shadow.innerHTML = "<style>:host{display:block}svg{display:block}</style>" + buildSVG(explanation && explanation.svg);
     applyZoom();
     renderStats();
+    renderViewToggle();
     renderExplanation(explanation);
   }
 
   function renderStats() {
-    var r = state.result;
+    var r = showingRefined() ? state.refine.result : state.result;
     var el = $("stats");
     el.textContent = "";
     [[r.lines.length, "guidelines"], [r.circles.length, "arcs"], [r.points.length, "points"]].forEach(function (s) {
@@ -1012,7 +1314,7 @@
   function setZoom(z) {
     state.zoom = Math.min(8, Math.max(0.25, z));
     if (Math.abs(state.zoom - 1) < 0.01) state.zoom = 1;
-    if (state.hover) render(); // highlight strokes are sized in screen pixels
+    if (state.hover || showingRefined()) render(); // highlight strokes are sized in screen pixels
     else applyZoom();
   }
 
@@ -1052,9 +1354,12 @@
       return false;
     }
     state.zoom = 1;
+    state.refine = null;
+    state.hover = null;
     analyze();
     render();
     updateLayerRows();
+    renderRefinePanel();
     var ab = state.doc.artboard;
     $("fileName").textContent = state.doc.name;
     $("fileDims").textContent = f(ab.w) + " × " + f(ab.h) + " · " + state.doc.elements.length + " shape" + (state.doc.elements.length === 1 ? "" : "s");
@@ -1121,7 +1426,7 @@
   // ===============================================================
 
   function baseName() {
-    return state.doc.name.replace(/\.svg$/i, "") + "-grid";
+    return state.doc.name.replace(/\.svg$/i, "") + (showingRefined() ? "-refined" : "") + "-grid";
   }
 
   function download(name, blob) {
@@ -1297,6 +1602,11 @@
     zoomIn: function () { setZoom(state.zoom * 1.25); },
     zoomOut: function () { setZoom(state.zoom / 1.25); },
     zoomFit: function () { setZoom(1); },
+    findImprovements: findImprovements,
+    setView: function (view) {
+      if (!state.refine) findImprovements();
+      if (state.refine && (view === "original" || state.refine.doc)) setView(view);
+    },
   };
 
   // ===============================================================
@@ -1307,6 +1617,7 @@
   buildCanvasControls();
   buildDetectionControls();
   buildPresets();
+  renderRefinePanel();
   syncAll();
   syncScrollbarWidth();
   document.querySelectorAll(".export .btn").forEach(function (b) { b.disabled = true; });

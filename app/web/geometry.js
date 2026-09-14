@@ -577,11 +577,12 @@
   // Segments of a subpath with their geometry, skipping zero-length straight ones.
   function describeSegments(sp) {
     var segs = [];
-    forEachSegment(sp, function (p, q) {
+    forEachSegment(sp, function (p, q, j) {
       var curved = isSegmentCurved(p, q);
       var length = getDistance(p.anchor, q.anchor);
       if (!curved && length < EPS) return;
-      segs.push({ p: p, q: q, a: p.anchor, b: q.anchor, length: length, curved: curved });
+      // ia/ib: indices of the segment's start and end nodes in the subpath.
+      segs.push({ p: p, q: q, a: p.anchor, b: q.anchor, ia: j, ib: (j + 1) % sp.nodes.length, length: length, curved: curved });
     });
     return segs;
   }
@@ -667,7 +668,7 @@
     return angleBetween(d1, d2) < 2 && pointToLineDistance(s2.b, [s1.a, s1.b]) < COLLINEAR_TOLERANCE;
   }
 
-  // Groups consecutive collinear pieces into edges: [{ vertices, length }].
+  // Groups consecutive collinear pieces into edges: [{ vertices, nodes, length }].
   function straightEdges(sp, segs) {
     var walk = traversal(segs, sp.closed, straightJoinable);
     var edges = [];
@@ -682,13 +683,14 @@
         var vertices = edge.vertices.concat([seg.b]);
         if (maxLineDeviation(vertices, edgeFit(vertices)) <= COLLINEAR_TOLERANCE) {
           edge.vertices = vertices;
+          edge.nodes.push(seg.ib);
           edge.length += seg.length;
           edge.last = seg;
           return;
         }
       }
       close();
-      edge = { vertices: [seg.a, seg.b], length: seg.length, last: seg };
+      edge = { vertices: [seg.a, seg.b], nodes: [seg.ia, seg.ib], length: seg.length, last: seg };
     });
     close();
     return edges;
@@ -1033,11 +1035,11 @@
     var mergedLines = []; // { line, into, angle, distance } — duplicates absorbed by an existing guideline
     var curves = []; // { segs, length, status, reason, deviation, candidate }
 
-    scaled.forEach(function (sp) {
+    scaled.forEach(function (sp, pathIndex) {
       var segs = describeSegments(sp);
 
       straightEdges(sp, segs).forEach(function (edge) {
-        var entry = { vertices: edge.vertices, length: edge.length, status: "short", line: -1 };
+        var entry = { vertices: edge.vertices, nodes: edge.nodes, path: pathIndex, length: edge.length, status: "short", line: -1 };
         straight.push(entry);
         if (edge.length < opt.minSegmentLength) return;
         var fit = snapToAxis(edgeFit(edge.vertices));
@@ -1062,7 +1064,7 @@
 
       curvedArcs(sp, segs, opt).forEach(function (arc) {
         var verdict = classifyArc(arc, artworkBounds, opt);
-        var entry = { segs: arc.segs, length: verdict.length, status: verdict.status, reason: verdict.reason, deviation: verdict.deviation, candidate: null };
+        var entry = { segs: arc.segs, path: pathIndex, length: verdict.length, status: verdict.status, reason: verdict.reason, deviation: verdict.deviation, candidate: null };
         curves.push(entry);
         if (!verdict.circle) return;
         verdict.circle.sourceItem = sp.id;
@@ -1124,7 +1126,7 @@
       trace: {
         straight: straight.map(function (e) {
           var vertices = e.vertices.map(un);
-          return { points: vertices, a: vertices[0], b: vertices[vertices.length - 1], length: e.length, status: e.status, line: e.line };
+          return { points: vertices, a: vertices[0], b: vertices[vertices.length - 1], path: e.path, nodes: e.nodes, length: e.length, status: e.status, line: e.line };
         }),
         mergedLines: mergedLines.map(function (e) {
           return { line: outLine(e.line), into: e.into, angle: e.angle, distance: e.distance };
@@ -1134,6 +1136,9 @@
           var c = e.candidate;
           return {
             beziers: e.segs.map(function (seg) { return [seg.p.anchor, seg.p.right, seg.q.left, seg.q.anchor].map(un); }),
+            path: e.path, // index into paths
+            nodes: e.segs.map(function (seg) { return seg.ia; }).concat([e.segs[e.segs.length - 1].ib]),
+            fit: c ? outCircle(c) : null, // this arc's own circle, when it is one
             length: e.length,
             status: e.status,
             reason: e.reason,
@@ -1175,5 +1180,7 @@
     areLinesParallel: areLinesParallel,
     isSegmentCurved: isSegmentCurved,
     fitCircle: fitCircle,
+    fitEdge: edgeFit,
+    cubicPoint: cubicPoint,
   };
 });

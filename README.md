@@ -47,6 +47,11 @@ They can also use **LogoGrid › Check for Updates…**, or skip a version.
 
 - **Open**: ⌘O, drag a file onto the window, paste SVG code (⌘V), or right-click an SVG in Finder › Open With › LogoGrid.
   From Illustrator, use File › Export › Export As… › SVG, and convert live text to outlines first.
+- **Refine** (⌘R): finds stroke weights, gaps, corner and curve radii, edge angles, alignments, concentric circles and
+  mirror symmetry that *almost* match, and lists each one with its measurements. Hover a suggestion to see the
+  measurements on the logo and the reshaped outline; uncheck any you want to leave as drawn. **Compare** (⌘2) shows the
+  refined logo over a dashed outline of the original, **Refined** (⌘3) shows it clean, and **Original** (⌘1) goes back.
+  In Compare and Refined, the grid and every export come from the refined logo.
 - **Layers**: toggle Logo, Guidelines, Arcs, Anchor points and Bézier handles. Click a layer's name to change its color, stroke, opacity, dashes, and point shape and size.
 - **Style presets**: Signal, Classic (the original script's look), Blueprint and Midnight. "Save current" stores your own.
 - **Canvas**: extend guidelines to the SVG artboard or to the artwork bounds, add padding, and set a background color or transparency.
@@ -90,17 +95,33 @@ Settings, presets and the last opened logo are remembered between launches.
 
 `tests/accuracy.test.js` checks all of this against synthetic artwork with known answers.
 
+## How Refine works
+
+- **Finding.** Using the same edges and circles as the grid, it groups near-misses: parallel edges within 1.5°
+  (snapped to a multiple of 15° when within 1.5° of one), stroke weights and gaps within 6% (a stroke is measured
+  between facing parallel edges with fill between them, or between concentric circles), radii within 5%, edges less
+  than 4 units off a shared line, circle centers within 4% of the radius, and mirror symmetry when at least 80% of
+  the points have a mirror partner whose neighbors mirror too. Differences under 0.2 units (at the 600-unit
+  detection size) are ignored. The target is the value most of the logo already uses, so the odd one out moves.
+- **Correcting.** Each accepted suggestion becomes a fixed target (a line for each edge, a radius and center for each
+  circle, mirror pairs), solved together by least squares, then applied by moving anchor points and handles until
+  every target holds. Neighbors that get pushed keep their own line, so widening a stem slides the edges around it
+  rather than tilting them. Rounded corners are redrawn tangent to both of their edges, and every corrected arc is a
+  true circular arc. Points no suggestion touches never move.
+- `tests/refine.test.js` checks the suggestions, the corrected geometry, and that a refined logo has nothing left to refine.
+
 ## Project layout
 
 ```
 app/web/geometry.js   detection engine (pure JS, no DOM)
+app/web/refine.js     finds near-misses and builds the refined logo (pure JS, no DOM)
 app/web/importer.js   SVG → bezier paths (shapes, transforms, <use>, sanitizing)
 app/web/app.js        UI, rendering, presets, export
 app/macos/main.swift  native window, menus, open/save panels, clipboard, settings
 app/macos/Updater.swift  checks GitHub Releases, installs updates
 VERSION               the version number releases are published under
 release.sh            build, zip and publish a GitHub Release
-tests/                node tests/geometry.test.js · node tests/accuracy.test.js
+tests/                node tests/geometry.test.js · node tests/accuracy.test.js · node tests/refine.test.js
 build.sh              build + optional install
 ```
 

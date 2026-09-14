@@ -47,6 +47,26 @@
       </div>
 
       <div class="scroll">
+        <section class="section refine" id="refineSection">
+          <h2>Refine</h2>
+          <div id="refineIntro">
+            <p class="note">Finds stroke weights, radii, angles, alignments and symmetry that almost match, and shows your logo with them made exact.</p>
+            <button class="btn btn-block refine-run" id="refineRun" type="button">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5l1.4 3.6L13 6.5 9.4 7.9 8 11.5 6.6 7.9 3 6.5l3.6-1.4z" fill="currentColor"/><path d="M12.5 10.5l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z" fill="currentColor"/></svg>
+              Find improvements
+            </button>
+          </div>
+          <div id="refineResults" hidden>
+            <div class="refine-summary" id="refineSummary"></div>
+            <div class="refine-list" id="refineList"></div>
+            <div class="refine-footer" id="refineFooter">
+              <button class="btn btn-small btn-quiet" id="refineAll" type="button">Select all</button>
+              <button class="btn btn-small btn-quiet" id="refineNone" type="button">Select none</button>
+              <button class="btn btn-small btn-quiet refine-clear" id="refineClear" type="button">Done</button>
+            </div>
+          </div>
+        </section>
+
         <section class="section">
           <h2>Layers</h2>
           <div id="layers"></div>
@@ -96,6 +116,11 @@
     <main class="stage" id="stage">
       <div class="toolbar">
         <div class="stats" id="stats"></div>
+        <div class="segmented view-toggle" id="viewToggle" role="group" aria-label="Logo version" hidden>
+          <button type="button" data-view="original">Original</button>
+          <button type="button" data-view="compare">Compare</button>
+          <button type="button" data-view="refined">Refined</button>
+        </div>
         <div class="zoom">
           <button class="icon-btn" id="zoomOut" title="Zoom out" aria-label="Zoom out">−</button>
           <button class="zoom-label" id="zoomFit" title="Fit to window">Fit</button>
@@ -135,6 +160,7 @@
   </dialog>
 
   <script src="geometry.js"></script>
+  <script src="refine.js"></script>
   <script src="importer.js"></script>
   <script src="app.js"></script>
 </body>

@@ -237,6 +237,12 @@
       elements.push({
         d: subs.map(G.subpathToPathData).join(""),
         fillRule: style.fillRule === "evenodd" ? "evenodd" : "nonzero",
+        // Flat paint, for drawing reshaped copies (refined logos) in their own colors.
+        // Gradients and patterns have no flat color, so they fall back to the logo color.
+        fill: paint.fill && !/^url/.test(style.fill) ? style.fill : paint.fill ? null : "none",
+        fillOpacity: (parseFloat(style.fillOpacity) || 1) * opacity,
+        stroke: paint.stroke && !/^url/.test(style.stroke) ? style.stroke : null,
+        strokeWidth: (parseFloat(style.strokeWidth) || 0) * Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2])),
       });
     }
 

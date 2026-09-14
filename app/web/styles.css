@@ -735,6 +735,56 @@ input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 5px; }
 .legend-swatch { width: 18px; height: 0; border-top: 3px solid var(--c); border-radius: 2px; }
 .legend-swatch.dashed { border-top-style: dashed; }
 
+/* Refine */
+
+.refine-run svg { width: 14px; height: 14px; color: var(--accent); }
+.refine-summary { margin: 0 0 var(--space-3); color: var(--text-2); font-size: var(--text-sm); }
+.refine-summary b { color: var(--text); font-weight: 600; }
+.refine-summary.perfect {
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.refine-summary.perfect b { display: block; margin-bottom: 2px; }
+.refine-list { display: grid; gap: var(--space-2); }
+.suggestion {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  transition: background 0.12s, border-color 0.12s;
+}
+.suggestion:hover, .suggestion:focus-within { border-color: var(--border-strong); background: var(--accent-soft); }
+.suggestion.off .suggestion-title, .suggestion.off .suggestion-detail { opacity: 0.5; }
+.suggestion input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--surface) center / 10px no-repeat;
+}
+.suggestion input:checked {
+  border-color: var(--accent-strong);
+  background-color: var(--accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 5.2l2 2L8 3' fill='none' stroke='white' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+.suggestion input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.suggestion-title { font-weight: 550; }
+.suggestion-detail { color: var(--text-2); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.refine-footer { display: flex; gap: var(--space-1); margin: var(--space-2) 0 0 -11px; }
+.refine-footer .refine-clear { margin-left: auto; margin-right: -11px; }
+
+.view-toggle { margin-left: auto; background: var(--surface); border: 1px solid var(--border); }
+.view-toggle button { flex: none; padding: 0 var(--space-3); }
+.view-toggle button[data-view="refined"].active { color: var(--accent-strong); }
+
 /* Hover affordances */
 
 .control.hoverable, .layer-head.hoverable { transition: background 0.12s; }

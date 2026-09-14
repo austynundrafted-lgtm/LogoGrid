@@ -14,6 +14,8 @@ cd "$ROOT"
 VERSION="$(tr -d '[:space:]' < VERSION)"
 TAG="v$VERSION"
 GH="$(command -v gh || echo "$HOME/.local/bin/gh")"
+# Publish to the repository the app checks for updates, never another remote (like upstream).
+REPO="$(/usr/libexec/PlistBuddy -c "Print :LogoGridUpdateRepository" app/macos/Info.plist)"
 
 fail() { echo "✗ $1" >&2; exit 1; }
 
@@ -21,7 +23,7 @@ fail() { echo "✗ $1" >&2; exit 1; }
 "$GH" auth status > /dev/null 2>&1 || fail "Not signed in to GitHub. Run: $GH auth login"
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "VERSION must look like 1.2.3 (found \"$VERSION\")."
 git diff --quiet && git diff --cached --quiet || fail "Commit your changes before releasing."
-if git rev-parse -q --verify "refs/tags/$TAG" > /dev/null || "$GH" release view "$TAG" > /dev/null 2>&1; then
+if git rev-parse -q --verify "refs/tags/$TAG" > /dev/null || "$GH" release view "$TAG" -R "$REPO" > /dev/null 2>&1; then
   fail "$TAG is already released. Bump the number in VERSION first."
 fi
 
@@ -55,12 +57,15 @@ BODY="$NOTES
 
 After that, LogoGrid tells you when a new version is available and installs it for you."
 
-echo "→ Pushing $(git branch --show-current)"
-git push origin HEAD
+REMOTE="$(git remote -v | awk -v repo="github.com/$REPO" '$2 ~ repo && $3 == "(push)" { print $1; exit }')"
+[[ -n "$REMOTE" ]] || fail "No git remote points to github.com/$REPO."
 
-echo "→ Publishing $TAG"
-"$GH" release create "$TAG" "$ZIP" --target "$(git rev-parse HEAD)" --title "LogoGrid $VERSION" --notes "$BODY"
-git fetch --tags --quiet origin
+echo "→ Pushing $(git branch --show-current) to $REMOTE"
+git push "$REMOTE" HEAD
+
+echo "→ Publishing $TAG to $REPO"
+"$GH" release create "$TAG" "$ZIP" -R "$REPO" --target "$(git rev-parse HEAD)" --title "LogoGrid $VERSION" --notes "$BODY"
+git fetch --tags --quiet "$REMOTE"
 
 echo "✓ Released LogoGrid $VERSION"
-"$GH" release view "$TAG" --json url --jq .url
+"$GH" release view "$TAG" -R "$REPO" --json url --jq .url

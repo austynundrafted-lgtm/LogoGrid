@@ -162,6 +162,33 @@ button, input, select { font: inherit; color: inherit; margin: 0; }
   background: var(--warning);
 }
 
+/* Update card */
+
+.update-card {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0 var(--gutter) var(--space-4);
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: var(--radius-lg);
+  background: var(--accent-soft);
+  flex-shrink: 0;
+}
+.update-title { font-weight: 650; }
+.update-sub { color: var(--text-2); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.update-notes {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+  white-space: pre-line;
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+.update-notes:empty { display: none; }
+.update-message { font-size: var(--text-sm); color: var(--warning); }
+.update-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
+
 /* Sections */
 
 .scroll {
@@ -737,7 +764,8 @@ input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 5px; }
 .about p { margin: var(--space-3) 0 0; color: var(--text-2); }
 .about .about-version { margin-top: var(--space-1); font-size: var(--text-sm); }
 .about-credit { font-size: var(--text-sm); }
-.about form { margin-top: var(--space-5); text-align: right; }
+.about form { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-5); }
+.about form .btn-quiet { margin-right: auto; margin-left: -12px; }
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 5px; border: 2px solid transparent; background-clip: content-box; }

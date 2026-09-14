@@ -22,6 +22,8 @@
 	<string>13.0</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.graphics-design</string>
+	<key>LogoGridUpdateRepository</key>
+	<string>austynundrafted-lgtm/LogoGrid</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>

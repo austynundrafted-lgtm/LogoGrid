@@ -34,6 +34,18 @@
         <ul class="file-notes" id="fileNotes" hidden></ul>
       </div>
 
+      <div class="update-card" id="updateCard" role="status" aria-live="polite" hidden>
+        <div class="update-title" id="updateTitle">Update available</div>
+        <div class="update-sub" id="updateSub"></div>
+        <div class="update-notes" id="updateNotes"></div>
+        <div class="update-message" id="updateMessage" hidden></div>
+        <div class="update-actions">
+          <button class="btn btn-primary btn-small" id="updateInstall">Install &amp; Relaunch</button>
+          <button class="btn btn-quiet btn-small" id="updateLater">Later</button>
+          <button class="btn btn-quiet btn-small" id="updateSkip">Skip this version</button>
+        </div>
+      </div>
+
       <div class="scroll">
         <section class="section">
           <h2>Layers</h2>
@@ -116,7 +128,10 @@
     <p class="about-version" id="aboutVersion"></p>
     <p>Generates construction guidelines, arcs, anchor points and bezier handles from any SVG logo.</p>
     <p class="about-credit">Detection logic adapted from <strong>Logo Grid Lines</strong> for Adobe Illustrator by Studio Gibbous (studiogibbous.com), released under a Creative Commons license.</p>
-    <form method="dialog"><button class="btn btn-primary">Close</button></form>
+    <form method="dialog">
+      <button class="btn btn-quiet" type="button" id="aboutCheckUpdates" hidden>Check for Updates…</button>
+      <button class="btn btn-primary">Close</button>
+    </form>
   </dialog>
 
   <script src="geometry.js"></script>

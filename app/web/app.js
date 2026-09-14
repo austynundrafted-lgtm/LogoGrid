@@ -1200,6 +1200,74 @@
     toastTimer = setTimeout(function () { el.classList.remove("show"); }, isError ? 4500 : 2200);
   }
 
+  // ===============================================================
+  // Updates (native app only; the shell checks GitHub Releases)
+  // ===============================================================
+
+  var offeredUpdate = null;
+
+  function formatSize(bytes) {
+    return bytes >= 1e6 ? (Math.round(bytes / 1e5) / 10) + " MB" : Math.max(1, Math.round(bytes / 1e3)) + " KB";
+  }
+
+  function setUpdateButtons(enabled, canInstall) {
+    $("updateInstall").hidden = !canInstall;
+    ["updateInstall", "updateLater", "updateSkip"].forEach(function (id) { $(id).disabled = !enabled; });
+  }
+
+  function updateStatus(info) {
+    var card = $("updateCard");
+    var message = $("updateMessage");
+    switch (info.state) {
+      case "available":
+        offeredUpdate = info;
+        $("updateTitle").textContent = "Update available";
+        $("updateSub").textContent =
+          "LogoGrid " + info.version + " · you have " + info.currentVersion + (info.size ? " · " + formatSize(info.size) : "");
+        // Release notes are Markdown; show them as plain lines.
+        $("updateNotes").textContent = (info.notes || "").replace(/^#+\s*/gm, "").replace(/^\s*[-*]\s+/gm, "• ").replace(/\*\*|`/g, "");
+        message.textContent = info.blockedReason || "";
+        message.hidden = !info.blockedReason;
+        setUpdateButtons(true, !info.blockedReason);
+        card.hidden = false;
+        break;
+      case "installing":
+        $("updateTitle").textContent = "Installing LogoGrid " + info.version + "…";
+        message.hidden = true;
+        setUpdateButtons(false, true);
+        card.hidden = false;
+        break;
+      case "relaunching":
+        $("updateTitle").textContent = "Relaunching…";
+        break;
+      case "current":
+        toast("LogoGrid " + info.version + " is up to date");
+        break;
+      case "error":
+        if (!card.hidden && offeredUpdate) {
+          $("updateTitle").textContent = "Update available";
+          message.textContent = info.message;
+          message.hidden = false;
+          setUpdateButtons(true, true);
+        } else {
+          toast(info.message, true);
+        }
+        break;
+    }
+  }
+
+  $("updateInstall").addEventListener("click", function () { post("installUpdate"); });
+  $("updateLater").addEventListener("click", function () { $("updateCard").hidden = true; });
+  $("updateSkip").addEventListener("click", function () {
+    if (offeredUpdate) post("skipUpdate", { version: offeredUpdate.version });
+    $("updateCard").hidden = true;
+  });
+  $("aboutCheckUpdates").hidden = !nativeBridge;
+  $("aboutCheckUpdates").addEventListener("click", function () {
+    $("about").close();
+    post("checkUpdates");
+  });
+
   function showAbout() {
     $("aboutVersion").textContent = "Version " + (BOOT.version || "dev");
     $("about").showModal();
@@ -1225,6 +1293,7 @@
     copySVG: copySVG,
     showAbout: showAbout,
     toast: toast,
+    updateStatus: updateStatus,
     zoomIn: function () { setZoom(state.zoom * 1.25); },
     zoomOut: function () { setZoom(state.zoom / 1.25); },
     zoomFit: function () { setZoom(1); },

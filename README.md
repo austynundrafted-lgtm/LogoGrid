@@ -14,10 +14,34 @@ detection approach, fixes for several bugs, and a full UI.
 ./build.sh --install
 ```
 
-This runs the tests, compiles the app, and copies it to `~/Applications/LogoGrid.app`.
+This runs the tests, compiles a universal (Apple Silicon + Intel) app, and copies it to `~/Applications/LogoGrid.app`.
 Use `./build.sh` on its own to build into `build/` without installing.
 
 Requirements: macOS 13+, Xcode command line tools (`swiftc`), and Node (for tests).
+
+## Share with a friend
+
+Send them the link to the latest release:
+**https://github.com/austynundrafted-lgtm/LogoGrid/releases/latest**
+(or email them the `LogoGrid-x.y.z.zip` from that page). They:
+
+1. Double-click the zip and drag **LogoGrid** into **Applications**. Running it from Downloads works, but it can't update itself from there.
+2. Open it. The first time, macOS says it can't verify the app: click **Done**, then open
+   **System Settings › Privacy & Security**, scroll down and click **Open Anyway**. This is only needed once,
+   because the app isn't notarized by Apple yet (that needs an Apple Developer Program membership).
+
+It runs on Apple Silicon and Intel Macs with macOS 13 or later.
+
+## Release an update
+
+1. Make and commit your changes.
+2. Bump the number in `VERSION` (for example `1.0.0` → `1.1.0`) and commit that too.
+3. Run `./release.sh "What changed"`.
+
+That builds the universal app, zips it, pushes your branch and publishes a GitHub Release. Everyone's copy
+checks for a newer release a few seconds after it opens and shows an **Update available** card; **Install &
+Relaunch** downloads it, verifies it (checksum, app identity, code signature), swaps it in and reopens.
+They can also use **LogoGrid › Check for Updates…**, or skip a version.
 
 ## Use
 
@@ -73,6 +97,9 @@ app/web/geometry.js   detection engine (pure JS, no DOM)
 app/web/importer.js   SVG → bezier paths (shapes, transforms, <use>, sanitizing)
 app/web/app.js        UI, rendering, presets, export
 app/macos/main.swift  native window, menus, open/save panels, clipboard, settings
+app/macos/Updater.swift  checks GitHub Releases, installs updates
+VERSION               the version number releases are published under
+release.sh            build, zip and publish a GitHub Release
 tests/                node tests/geometry.test.js · node tests/accuracy.test.js
 build.sh              build + optional install
 ```

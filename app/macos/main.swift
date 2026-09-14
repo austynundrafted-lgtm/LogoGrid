@@ -16,6 +16,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private var webRoot: URL!
     private var pageReady = false
     private var pendingFiles: [URL] = []
+    private var updater: Updater!
+    private var updateMenuItem: NSMenuItem!
+    private var checkedForUpdatesAtLaunch = false
 
     private var version: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
@@ -24,6 +27,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     // MARK: Launch
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        updater = Updater(
+            report: { [weak self] payload in self?.sendUpdateStatus(payload) },
+            onAvailabilityChange: { [weak self] release in
+                self?.updateMenuItem.title = release.map { "Install LogoGrid \($0.version) and Relaunch…" } ?? "Check for Updates…"
+            }
+        )
         buildMenu()
 
         webRoot = Bundle.main.resourceURL!.appendingPathComponent("web", isDirectory: true)
@@ -85,6 +94,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             let files = pendingFiles
             pendingFiles = []
             files.forEach(loadFile)
+            if !checkedForUpdatesAtLaunch {
+                checkedForUpdatesAtLaunch = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.updater.check(userInitiated: false) }
+            }
+        case "checkUpdates":
+            updater.check(userInitiated: true)
+        case "installUpdate":
+            updater.install()
+        case "skipUpdate":
+            if let version = body["version"] as? String { updater.skip(version: version) }
         case "open":
             showOpenPanel()
         case "save":
@@ -104,6 +123,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         default:
             break
         }
+    }
+
+    private func sendUpdateStatus(_ payload: [String: Any]) {
+        guard let data = try? JSONSerialization.data(withJSONObject: payload),
+              let json = String(data: data, encoding: .utf8) else { return }
+        callJS("window.LogoGrid.updateStatus(\(json))")
+    }
+
+    @objc private func updateMenuAction(_ sender: Any?) {
+        if updater.available != nil { updater.install() } else { updater.check(userInitiated: true) }
     }
 
     private func callJS(_ source: String) {
@@ -194,6 +223,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
     private func buildMenu() {
         let main = NSMenu()
+        updateMenuItem = NSMenuItem(title: "Check for Updates…", action: #selector(updateMenuAction(_:)), keyEquivalent: "")
 
         func item(_ title: String, _ action: Selector?, _ key: String = "", _ modifiers: NSEvent.ModifierFlags = .command) -> NSMenuItem {
             let menuItem = NSMenuItem(title: title, action: action, keyEquivalent: key)
@@ -211,6 +241,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
 
         _ = submenu("LogoGrid", [
             item("About LogoGrid", #selector(showAbout(_:))),
+            updateMenuItem,
             .separator(),
             item("Hide LogoGrid", #selector(NSApplication.hide(_:)), "h"),
             item("Hide Others", #selector(NSApplication.hideOtherApplications(_:)), "h", [.command, .option]),

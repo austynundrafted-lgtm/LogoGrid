@@ -5,6 +5,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 BUILD="$ROOT/build"
 APP="$BUILD/LogoGrid.app"
+VERSION="$(tr -d '[:space:]' < "$ROOT/VERSION")"
+BUILD_NUMBER="$(git -C "$ROOT" rev-list --count HEAD 2>/dev/null || echo 1)"
 
 echo "→ Running engine tests"
 node "$ROOT/tests/geometry.test.js" > /dev/null
@@ -13,11 +15,16 @@ node "$ROOT/tests/accuracy.test.js" > /dev/null || { node "$ROOT/tests/accuracy.
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-echo "→ Compiling"
-swiftc -O -swift-version 5 -target "$(uname -m)-apple-macos13.0" \
-  "$ROOT/app/macos/main.swift" -o "$APP/Contents/MacOS/LogoGrid"
+echo "→ Compiling LogoGrid $VERSION ($BUILD_NUMBER) for Apple Silicon and Intel"
+SOURCES=("$ROOT/app/macos/main.swift" "$ROOT/app/macos/Updater.swift")
+for arch in arm64 x86_64; do
+  swiftc -O -swift-version 5 -target "$arch-apple-macos13.0" "${SOURCES[@]}" -o "$BUILD/LogoGrid-$arch"
+done
+lipo -create "$BUILD/LogoGrid-arm64" "$BUILD/LogoGrid-x86_64" -output "$APP/Contents/MacOS/LogoGrid"
+rm -f "$BUILD/LogoGrid-arm64" "$BUILD/LogoGrid-x86_64"
 
 cp "$ROOT/app/macos/Info.plist" "$APP/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" -c "Set :CFBundleVersion $BUILD_NUMBER" "$APP/Contents/Info.plist"
 cp -R "$ROOT/app/web" "$APP/Contents/Resources/web"
 
 ICNS="$BUILD/AppIcon.icns"
